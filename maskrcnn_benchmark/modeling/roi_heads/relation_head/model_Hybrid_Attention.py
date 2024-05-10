@@ -91,11 +91,11 @@ class SHA_Encoder(nn.Module):
         super().__init__()
         self.cfg = config
         self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.DROPOUT_RATE
-        self.num_head = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.NUM_HEAD # 8头
-        self.inner_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.INNER_DIM # 2048
-        self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM # 512
-        self.k_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.KEY_DIM # 64
-        self.v_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.VAL_DIM # 64
+        self.num_head = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.NUM_HEAD 
+        self.inner_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.INNER_DIM 
+        self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM 
+        self.k_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.KEY_DIM
+        self.v_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRANSFORMER.VAL_DIM 
         self.cross_module = nn.ModuleList([
             Single_Layer_Hybrid_Attention(config)
             for _ in range(n_layers)])
@@ -126,7 +126,7 @@ class SHA_Context(nn.Module):
         self.num_rel_cls = len(rel_classes)
         self.in_channels = in_channels
         self.obj_dim = in_channels
-        self.embed_dim = self.cfg.MODEL.ROI_RELATION_HEAD.EMBED_DIM # glove：200
+        self.embed_dim = self.cfg.MODEL.ROI_RELATION_HEAD.EMBED_DIM 
         self.hidden_dim = self.cfg.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM # 512
         self.nms_thresh = self.cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
 
@@ -171,14 +171,14 @@ class SHA_Context(nn.Module):
             nn.Linear(self.hidden_dim * 2 + 128, self.hidden_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(p=self.dropout_rate),
-            nn.Linear(self.hidden_dim, self.hidden_dim)  # 最后输出维度是512
+            nn.Linear(self.hidden_dim, self.hidden_dim) 
         )
         layer_init(self.lin_tri[1], xavier=True)
         layer_init(self.lin_tri[4], xavier=True)
-        self.pred_embed_proj = nn.Linear(self.embed_dim, self.hidden_dim)  # 200维映射到512 新
-        # ---------------UPT：InteractionHead提取union feature-------------
+        self.pred_embed_proj = nn.Linear(self.embed_dim, self.hidden_dim) 
+        # ---------------UPT：InteractionHead for union feature-------------
         self.interaction_head = InteractionHead(self.cfg.UPT.HIDDEN_DIM, self.cfg.UPT.REPR_DIM,
-                                                self.cfg.UPT.NUM_CHANNELS)  # 256,512,2048
+                                                self.cfg.UPT.NUM_CHANNELS) 
         self.up_dim = nn.Linear(self.hidden_dim * 2, self.hidden_dim * 8)
 
     def forward(self, roi_features, proposals, global_features, rel_pair_idxs, union_features, logger=None):
@@ -201,17 +201,15 @@ class SHA_Context(nn.Module):
         # encode objects with transformer
 
         num_objs = [len(p) for p in proposals]
-        obj_pre_rep_vis = cat((roi_features, pos_embed), -1) # 116,1024
-        obj_pre_rep_vis = self.lin_obj_visual(obj_pre_rep_vis) # 4224→512
+        obj_pre_rep_vis = cat((roi_features, pos_embed), -1) 
+        obj_pre_rep_vis = self.lin_obj_visual(obj_pre_rep_vis) 
         obj_pre_rep_txt = obj_embed
-        obj_pre_rep_txt = self.lin_obj_textual(obj_pre_rep_txt) # 116,1024
-        obj_feats_vis, _, = self.context_obj(obj_pre_rep_vis, obj_pre_rep_txt, num_objs) # SHA encoder，只保留第一个返回值，即视觉特征，512维
+        obj_pre_rep_txt = self.lin_obj_textual(obj_pre_rep_txt) 
+        obj_feats_vis, _, = self.context_obj(obj_pre_rep_vis, obj_pre_rep_txt, num_objs) 
 
-        # -----------------UPT提取union feature-----------------
-        new_union_features = self.interaction_head(roi_features, obj_feats_vis, proposals, global_features, rel_pair_idxs, self.mode) # 输出1024维
-        # alpha = torch.sigmoid(self.alpha)
-        # union_features = self.alpha * union_features + (1-self.alpha) * self.up_dim(new_union_features)
-        union_features = union_features + self.up_dim(new_union_features)  # 还是这个效果最好
+        # -----------------UPT for union feature-----------------
+        new_union_features = self.interaction_head(roi_features, obj_feats_vis, proposals, global_features, rel_pair_idxs, self.mode) 
+        union_features = union_features + self.up_dim(new_union_features) 
 
         obj_feats = obj_feats_vis
 
@@ -236,11 +234,10 @@ class SHA_Context(nn.Module):
         tri_reps = []
         obj_ctx_all = obj_feats.split(num_objs)
         obj_label_all = obj_preds.split(num_objs)
-        # 三元组分支
-        # 分图片来吧 一起真的崩
+  
         for obj_c, obj_l, rel_pair_id, num_obj in zip(obj_ctx_all, obj_label_all, rel_pair_idxs, num_objs):
             num_rel = len(rel_pair_id)
-            if num_rel == 0:  # 有这样的图片
+            if num_rel == 0:  
                 continue
             # tri_rep = torch.cat((obj_c[rel_pair_id[:, 0]], obj_c[rel_pair_id[:, 1]]), dim=-1)
             sub_label = obj_l[rel_pair_id[:, 0]]
