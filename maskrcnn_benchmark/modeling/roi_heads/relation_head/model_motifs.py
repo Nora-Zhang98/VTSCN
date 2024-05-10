@@ -67,7 +67,7 @@ class DecoderRNN(nn.Module):
         with torch.no_grad():
             self.obj_embed.weight.copy_(obj_embed_vecs, non_blocking=True)
 
-        self.hidden_size = hidden_dim # hidden dim直接改成128？
+        self.hidden_size = hidden_dim 
         self.inputs_dim = inputs_dim
         self.input_size = self.inputs_dim + self.embed_dim
         self.nms_thresh = self.cfg.TEST.RELATION.LATER_NMS_PREDICTION_THRES
@@ -297,18 +297,15 @@ class LSTMContext(nn.Module):
             nn.Linear(self.hidden_dim * 2 + 128, self.hidden_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(p=self.dropout_rate),
-            nn.Linear(self.hidden_dim, self.hidden_dim)  # 最后输出维度是512
+            nn.Linear(self.hidden_dim, self.hidden_dim) 
         )
         layer_init(self.lin_tri[1], xavier=True)
         layer_init(self.lin_tri[4], xavier=True)
-        # self.pred_embed_proj = nn.Linear(self.embed_dim, 128)  # 200维映射到128
-        self.pred_embed_proj = nn.Linear(self.embed_dim, self.hidden_dim) # 200维映射到512 新
-        # ---------------UPT：InteractionHead提取union feature-------------
-        self.interaction_head = InteractionHead(self.cfg.UPT.HIDDEN_DIM, self.cfg.UPT.REPR_DIM, self.cfg.UPT.NUM_CHANNELS)  # 256,512,2048
+        self.pred_embed_proj = nn.Linear(self.embed_dim, self.hidden_dim) 
+        # ---------------UPT：InteractionHead for union feature-------------
+        self.interaction_head = InteractionHead(self.cfg.UPT.HIDDEN_DIM, self.cfg.UPT.REPR_DIM, self.cfg.UPT.NUM_CHANNELS) 
         self.up_dim = nn.Linear(self.hidden_dim*2, self.hidden_dim * 8)
-        # ---------------------MultiheadAttention融合----------------------
-        # self.fusion_attn = ScaledDotProductAttention(temperature=np.power(4096, 0.5))
-        # self.cross_fusion = CA_Encoder(config, 1)
+
     def sort_rois(self, proposals):
         c_x = center_x(proposals)
         # leftright order
@@ -412,9 +409,9 @@ class LSTMContext(nn.Module):
         # object level contextual feature
         obj_dists, obj_preds, obj_ctx, perm, inv_perm, ls_transposed = self.obj_ctx(obj_pre_rep, proposals, obj_labels, boxes_per_cls, ctx_average=ctx_average)
 
-        # -----------------UPT提取union feature-----------------
-        new_union_features = self.interaction_head(x, obj_ctx, proposals, global_features, rel_pair_idxs, self.mode) # 512维 现在用的
-        union_features = union_features + self.up_dim(new_union_features) # 还是这个效果最好 # 现在用的
+        # -----------------UPT for union feature-----------------
+        new_union_features = self.interaction_head(x, obj_ctx, proposals, global_features, rel_pair_idxs, self.mode) 
+        union_features = union_features + self.up_dim(new_union_features) 
 
         # edge level contextual feature
         obj_embed2 = self.obj_embed2(obj_preds.long())
@@ -423,11 +420,10 @@ class LSTMContext(nn.Module):
         tri_reps = []
         obj_ctx_all = obj_ctx.split(num_objs)
         obj_label_all = obj_preds.split(num_objs)
-        # 三元组分支
-        # 分图片来吧 一起真的崩
+
         for obj_c, obj_l, rel_pair_id, num_obj in zip(obj_ctx_all, obj_label_all, rel_pair_idxs, num_objs):
             num_rel = len(rel_pair_id)
-            if num_rel == 0:  # 有这样的图片
+            if num_rel == 0: 
                 continue
             sub_label = obj_l[rel_pair_id[:, 0]]
             obj_label = obj_l[rel_pair_id[:, 1]]
