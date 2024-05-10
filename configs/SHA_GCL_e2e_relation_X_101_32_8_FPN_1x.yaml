@@ -148,7 +148,7 @@ GLOBAL_SETTING:
   BASIC_ENCODER: "Motifs" #'Hybrid-Attention'
   # ['Self-Attention', 'Cross-Attention', 'Hybrid-Attention'] for Transformer-Based Model, and ['Motifs', 'VTransE'] for DNN-Based Model
   ############### Parameters for Global Settings of Experiment ##############
-  DATASET_CHOICE: 'VG' # 'GQA'
+  DATASET_CHOICE: 'VG' # 'GQA_200'
   USE_BIAS: True                                      # If use the relation statistics to serve as the priori knowledge
   CHOOSE_BEST_MODEL_BY_METRIC: '_mean_recall'         # ['_recall', '_mean_recall'] To control which metric is the main concern
   PRINT_INTERVAL: 100
