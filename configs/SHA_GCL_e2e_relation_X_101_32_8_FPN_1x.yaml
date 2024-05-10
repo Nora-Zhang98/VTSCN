@@ -148,7 +148,7 @@ GLOBAL_SETTING:
   BASIC_ENCODER: "Motifs" #'Hybrid-Attention'
   # ['Self-Attention', 'Cross-Attention', 'Hybrid-Attention'] for Transformer-Based Model, and ['Motifs', 'VTransE'] for DNN-Based Model
   ############### Parameters for Global Settings of Experiment ##############
-  DATASET_CHOICE: 'GQA' # 'VG'
+  DATASET_CHOICE: 'VG' # 'GQA'
   USE_BIAS: True                                      # If use the relation statistics to serve as the priori knowledge
   CHOOSE_BEST_MODEL_BY_METRIC: '_mean_recall'         # ['_recall', '_mean_recall'] To control which metric is the main concern
   PRINT_INTERVAL: 100
@@ -163,8 +163,7 @@ GLOBAL_SETTING:
     ZERO_LABEL_PADDING_MODE: 'rand_insert'  # ['rand_insert', 'rand_choose', 'all_include'], to control how to insert into the relation which is ZERO
     NO_RELATION_PENALTY: 0.1
 OUTPUT_DIR: './output/relation_baseline'
-#OUTPUT_DIR: 'G:/2022CVPR_models/0907_drn_Duals_mlp_add_nogateloss_DualS_noRouter_noid'
 UPT:
-    HIDDEN_DIM: 256
+    HIDDEN_DIM: 256 # 512 for vctree
     REPR_DIM: 512
     NUM_CHANNELS: 2048
