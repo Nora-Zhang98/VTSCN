@@ -93,7 +93,7 @@ class TransLike_GCL(nn.Module):
 
         self.num_groups = len(self.max_elemnt_list)
         self.rel_compress_all, self.ctx_compress_all = self.generate_muti_networks(self.num_groups)
-        self.v2l_proj_all = self.generate_v2l_networks(self.num_groups)  # 新增 !!两个self.classifer，在load的时候前面的classifer的参数是随机的
+        self.v2l_proj_all = self.generate_v2l_networks(self.num_groups)  
         self.CE_loss = nn.CrossEntropyLoss()
 
         if self.use_bias:
@@ -106,7 +106,7 @@ class TransLike_GCL(nn.Module):
             self.criterion_loss = nn.CrossEntropyLoss()
 
         self.tri_up_dim = nn.Linear(config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM, self.pooling_dim)
-        self.pred_embed = torch.load('./pred_embedding.pt').cuda()  # 按样本多少顺序，在get_item()的时候已经把谓语的index改了
+        self.pred_embed = torch.load('./pred_embedding.pt').cuda()  
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.simi_CE_loss = nn.CrossEntropyLoss()
 
@@ -114,7 +114,7 @@ class TransLike_GCL(nn.Module):
         add_losses = {}
         obj_dists, obj_preds, edge_ctx, union_features, tri_rep = self.context_layer(roi_features, proposals, global_features, rel_pair_idxs, union_features, logger)
         # post decode
-        edge_rep = self.post_emb(edge_ctx) # 512→1024
+        edge_rep = self.post_emb(edge_ctx) 
         edge_rep = edge_rep.view(edge_rep.size(0), 2, self.hidden_dim)
         head_rep = edge_rep[:, 0].contiguous().view(-1, self.hidden_dim)
         tail_rep = edge_rep[:, 1].contiguous().view(-1, self.hidden_dim)
@@ -205,21 +205,21 @@ class TransLike_GCL(nn.Module):
                 rel_compress_now = self.rel_compress_all[jdx].cuda()
                 ctx_compress_now = self.ctx_compress_all[jdx].cuda()
                 group_output_now = rel_compress_now(group_visual) + ctx_compress_now(group_input)
-                # ---------------新增----------------- # 用group_visual 那个复杂的做v2l
-                v2l_proj_now = self.v2l_proj_all[jdx]  # 新增 # MLP把它投影到word embedding的维度 统一4096→200 最终维度类似191x200
+               
+                v2l_proj_now = self.v2l_proj_all[jdx]  
                 v2l_rep_now = v2l_proj_now(group_visual)
                 v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                v2l_we_now = self.pred_embed[:self.predicate_incremental_count[i] + 1]  # 递增的类别数 最终维度类似5x200 10x200
+                v2l_we_now = self.pred_embed[:self.predicate_incremental_count[i] + 1] 
                 v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
-                cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp()  # 余弦相似度实质上就是norm(A)*norm(B)
-                # -----------------------------------
+                cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp() 
+               
                 if self.use_bias:
                     rel_bias_now = self.freq_bias_all[jdx]
-                    group_output_now = group_output_now + rel_bias_now.index_with_labels(group_pairs.long()) + cos_simi # 把余弦相似度加上去
+                    group_output_now = group_output_now + rel_bias_now.index_with_labels(group_pairs.long()) + cos_simi 
                 # actual_label_piece: if label is out of range, then filter it to ensure the training can continue
                 actual_label_now = self.pre_group_matrix[jdx][group_label]
                 add_losses['%d_CE_loss' % (jdx + 1)] = self.CE_loss(group_output_now, actual_label_now)
-                add_losses['%d_simi_loss' % (jdx + 1)] = self.simi_CE_loss(cos_simi, actual_label_now)  # 新增loss
+                add_losses['%d_simi_loss' % (jdx + 1)] = self.simi_CE_loss(cos_simi, actual_label_now) 
                 if self.Knowledge_Transfer_Mode == 'KL_logit_Neighbor':
                     if i > 0:
                         '''count knowledge transfer loss'''
@@ -250,14 +250,14 @@ class TransLike_GCL(nn.Module):
                         rel_compress_bef = self.rel_compress_all[jbef]
                         ctx_compress_bef = self.ctx_compress_all[jbef]
                         group_output_bef = rel_compress_bef(group_visual) + ctx_compress_bef(group_input)
-                        # ---------------新增-----------------
-                        v2l_proj_now = self.v2l_proj_all[jbef]  # 新增 # MLP把它投影到word embedding的维度 统一4096→200 最终维度类似191x200
+                        
+                        v2l_proj_now = self.v2l_proj_all[jbef] 
                         v2l_rep_now = v2l_proj_now(group_visual)
                         v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                        v2l_we_now = self.pred_embed[:self.predicate_incremental_count[jbef] + 1]  # 递增的类别数 最终维度类似5x200 10x200
+                        v2l_we_now = self.pred_embed[:self.predicate_incremental_count[jbef] + 1]  
                         v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
                         cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp()
-                        # -----------------------------------
+                        
                         if self.use_bias:
                             rel_bias_bef = self.freq_bias_all[jbef]
                             group_output_bef = group_output_bef + rel_bias_bef.index_with_labels(group_pairs.long()) + cos_simi
@@ -316,14 +316,14 @@ class TransLike_GCL(nn.Module):
             rel_compress_test = self.rel_compress_all[-1].cuda()
             ctx_compress_test = self.ctx_compress_all[-1].cuda()
             rel_dists = rel_compress_test(visual_rep) + ctx_compress_test(prod_rep)
-            # ------------新增------------
+   
             v2l_test = self.v2l_proj_all[-1]
             v2l_rep = v2l_test(visual_rep)
             v2l_rep_norm = v2l_rep / v2l_rep.norm(dim=1, keepdim=True)
             v2l_we_embed = self.pred_embed
             v2l_we_embed_norm = v2l_we_embed / v2l_we_embed.norm(dim=1, keepdim=True)
             cos_simi = v2l_rep_norm @ v2l_we_embed_norm.t() * self.logit_scale.exp()
-            # ----------------------------
+
             if self.use_bias:
                 rel_bias_test = self.freq_bias_all[-1]
                 rel_dists = rel_dists + rel_bias_test.index_with_labels(pair_pred.long()) + cos_simi
@@ -391,7 +391,7 @@ class TransLike_GCL(nn.Module):
 
     def generate_v2l_networks(self, num_cls):
         '''generate all the hier-net in the model, need to set mannually if use new hier-class'''
-        self.v2l_embedding_1 = nn.Linear(self.pooling_dim, 200)  # 原来的都是pooling_dim 4096，现在是200，word embedding的维度
+        self.v2l_embedding_1 = nn.Linear(self.pooling_dim, 200) 
         self.v2l_embedding_2 = nn.Linear(self.pooling_dim, 200)
         self.v2l_embedding_3 = nn.Linear(self.pooling_dim, 200)
         self.v2l_embedding_4 = nn.Linear(self.pooling_dim, 200)
@@ -403,8 +403,8 @@ class TransLike_GCL(nn.Module):
             classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3, self.v2l_embedding_4]
         elif num_cls < 4:
             exit('wrong num in compress_all')
-        else:  # 5个分类器
-            self.v2l_embedding_5 = nn.Linear(self.pooling_dim, 200) # self.pooling_dim→200
+        else: 
+            self.v2l_embedding_5 = nn.Linear(self.pooling_dim, 200) 
             layer_init(self.v2l_embedding_5, xavier=True)
             if num_cls == 5:
                 classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3, self.v2l_embedding_4, self.v2l_embedding_5]
@@ -721,8 +721,8 @@ class MotifsLike_GCL(nn.Module):
 
         assert in_channels is not None
         num_inputs = in_channels
-        self.use_vision = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_VISION # True
-        self.use_bias = config.GLOBAL_SETTING.USE_BIAS # True
+        self.use_vision = config.MODEL.ROI_RELATION_HEAD.PREDICT_USE_VISION 
+        self.use_bias = config.GLOBAL_SETTING.USE_BIAS 
 
         # load class dict
         statistics = get_dataset_statistics(config)
@@ -764,50 +764,38 @@ class MotifsLike_GCL(nn.Module):
         num_of_group_element_list, predicate_stage_count, self.predicate_incremental_count = get_group_splits(config.GLOBAL_SETTING.DATASET_CHOICE, self.group_split_mode)
         self.max_group_element_number_list = generate_num_stage_vector(num_of_group_element_list)
         self.incre_idx_list, self.max_elemnt_list, self.group_matrix, self.kd_matrix = get_current_predicate_idx(
-            num_of_group_element_list, 0.1, config.GLOBAL_SETTING.DATASET_CHOICE) # 后两个是一样的思路，掩模为0
+            num_of_group_element_list, 0.1, config.GLOBAL_SETTING.DATASET_CHOICE)
         self.sample_rate_matrix = generate_sample_rate_vector(config.GLOBAL_SETTING.DATASET_CHOICE, self.max_group_element_number_list)
         self.bias_for_group_split = generate_current_sequence_for_bias(num_of_group_element_list, config.GLOBAL_SETTING.DATASET_CHOICE)
 
         self.num_groups = len(self.max_elemnt_list)
-        self.rel_classifer_all = self.generate_muti_networks(self.num_groups) # 5个分类器
-        self.v2l_proj_all = self.generate_v2l_networks(self.num_groups) # 新增 !!两个self.classifer，在load的时候前面的classifer的参数是随机的
+        self.rel_classifer_all = self.generate_muti_networks(self.num_groups) 
+        self.v2l_proj_all = self.generate_v2l_networks(self.num_groups) 
         self.CE_loss = nn.CrossEntropyLoss()
         self.simi_CE_loss = nn.CrossEntropyLoss()
         if self.use_bias:
             self.freq_bias_all = self.generate_multi_bias(config, statistics, self.num_groups)
         if self.Knowledge_Transfer_Mode != 'None': # KL_logit_topdown
             self.NLL_Loss = nn.NLLLoss()
-            self.pre_group_matrix = torch.tensor(self.group_matrix, dtype=torch.int64).cuda() # 0：5,51
-            self.pre_kd_matrix = torch.tensor(self.kd_matrix, dtype=torch.float16).cuda() # 0.1：5,51
+            self.pre_group_matrix = torch.tensor(self.group_matrix, dtype=torch.int64).cuda()
+            self.pre_kd_matrix = torch.tensor(self.kd_matrix, dtype=torch.float16).cuda()
         self.criterion_loss = nn.CrossEntropyLoss()
         '''
         torch.int64
         torch.float16
         '''
         self.tri_up_dim = nn.Linear(config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM, self.pooling_dim)
-        # self.T = 0.5 # 可以是可学习的参数
-        # self.alpha = nn.Parameter(torch.ones(2))
-        # self.linear_pred = MLP(self.pooling_dim, self.hidden_dim, 200, 2)
-        self.pred_embed = torch.load('./pred_embedding.pt').cuda() # 按样本多少顺序，在get_item()的时候已经把谓语的index改了
+        self.pred_embed = torch.load('./pred_embedding.pt').cuda() 
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1/0.07))
 
-        # -----------------------NO GCL-----------------------------
-        # self.rel_classifer_no_gcl = nn.Linear(self.pooling_dim, 51)
-        # self.v2l_proj_all_no_gcl = nn.Linear(self.pooling_dim, 200)
-        # self.freq_bias_no_gcl = FrequencyBias_GCL(config, statistics, config.GLOBAL_SETTING.DATASET_CHOICE, predicate_all_list=self.bias_for_group_split[4])
-        # self.tri_up_dim2 = nn.Linear(config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM*2, self.pooling_dim)
-        # ---------------- 消融----------------
-        # self.up_dim = nn.Linear(1024, self.pooling_dim)
-
-        # ----------------------refine------------------------------
         if config.GLOBAL_SETTING.DATASET_CHOICE == 'VG':
             self.logit_wt_1 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[0] + 1)).cuda()
             self.logit_wt_2 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[1] + 1)).cuda()
             self.logit_wt_3 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[2] + 1)).cuda()
             self.logit_wt_4 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[3] + 1)).cuda()
-            self.logit_wt_5 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[4] + 1)).cuda() # GQA不要这2句
+            self.logit_wt_5 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[4] + 1)).cuda() 
             self.logit_wt_all = [self.logit_wt_1, self.logit_wt_2, self.logit_wt_3, self.logit_wt_4, self.logit_wt_5]
-        elif config.GLOBAL_SETTING.DATASET_CHOICE == 'GQA':
+        elif config.GLOBAL_SETTING.DATASET_CHOICE == 'GQA_200':
             self.logit_wt_1 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[0] + 1)).cuda()
             self.logit_wt_2 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[1] + 1)).cuda()
             self.logit_wt_3 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[2] + 1)).cuda()
@@ -848,16 +836,13 @@ class MotifsLike_GCL(nn.Module):
         prod_rep = cat(prod_reps, dim=0)
         pair_pred = cat(pair_preds, dim=0)
 
-        prod_rep = self.post_cat(prod_rep) # 4096维
+        prod_rep = self.post_cat(prod_rep) 
 
         if self.use_vision:
             if self.union_single_not_match:
                 prod_rep = prod_rep * self.up_dim(union_features)
             else:
-                # prod_rep = prod_rep * union_features * self.tri_up_dim(tri_rep) # 512→4096
-                # prod_rep = prod_rep * union_features
-                prod_rep = (prod_rep + self.tri_up_dim(tri_rep)) * union_features #  现在用的
-                # prod_rep = (prod_rep + self.tri_up_dim(tri_rep)) * self.tri_up_dim2(union_features)
+                prod_rep = (prod_rep + self.tri_up_dim(tri_rep)) * union_features 
         '''begin to change'''
         add_losses = {}
 
@@ -868,19 +853,19 @@ class MotifsLike_GCL(nn.Module):
                 add_losses['obj_loss'] = loss_refine_obj
 
             rel_labels = cat(rel_labels, dim=0)
-            max_label = max(rel_labels) # 选出最大的谓语id，以便确定需要几个分类器(这里的谓语id已经按数量重排序了)
+            max_label = max(rel_labels) 
 
-            num_groups = self.incre_idx_list[max_label.item()] # 需要的分类器个数
+            num_groups = self.incre_idx_list[max_label.item()] 
             if num_groups == 0:
-                num_groups = max(self.incre_idx_list) # 分的组数
+                num_groups = max(self.incre_idx_list) 
             cur_chosen_matrix = []
 
             for i in range(num_groups):
                 cur_chosen_matrix.append([])
 
-            for i in range(len(rel_labels)): # 分组重采样 一个一个来 cur_chosen_matrix里存的是rel_label对应的组数
+            for i in range(len(rel_labels)): 
                 rel_tar = rel_labels[i].item()
-                if rel_tar == 0: # background
+                if rel_tar == 0: 
                     if self.zero_label_padding_mode == 'rand_insert':
                         random_idx = random.randint(0, num_groups - 1)
                         cur_chosen_matrix[random_idx].append(i)
@@ -904,36 +889,35 @@ class MotifsLike_GCL(nn.Module):
                                 cur_chosen_matrix[k].append(i)
                             break
 
-            for i in range(num_groups): # 按组，先分类器，
+            for i in range(num_groups): 
                 if max_label == 0:
                     group_input = prod_rep
                     group_label = rel_labels
                     group_pairs = pair_pred
-                else: # 对应prob_rep,rel_label,pair_pred
+                else: 
                     group_input = prod_rep[cur_chosen_matrix[i]]
                     group_label = rel_labels[cur_chosen_matrix[i]]
                     group_pairs = pair_pred[cur_chosen_matrix[i]]
                 '''count Cross Entropy loss''' # parallel classifier optimization
-                jdx = i # 当前组的分类器
-                rel_classier_now = self.rel_classifer_all[jdx].cuda() # 递增的
-                group_output_now = rel_classier_now(group_input) # 第一组5(加了bg)
-                # ---------------新增-----------------
-                v2l_proj_now = self.v2l_proj_all[jdx]  # 新增 # MLP把它投影到word embedding的维度 统一4096→200 最终维度类似191x200
+                jdx = i
+                rel_classier_now = self.rel_classifer_all[jdx].cuda()
+                group_output_now = rel_classier_now(group_input) 
+
+                v2l_proj_now = self.v2l_proj_all[jdx] 
                 v2l_rep_now = v2l_proj_now(group_input)
                 v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                v2l_we_now = self.pred_embed[:self.predicate_incremental_count[i]+1] # 递增的类别数 最终维度类似5x200 10x200
+                v2l_we_now = self.pred_embed[:self.predicate_incremental_count[i]+1] 
                 v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
-                cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp() # 余弦相似度实质上就是norm(A)*norm(B)
-                # -----------------------------------
+                cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp() 
+ 
                 if self.use_bias:
                     rel_bias_now = self.freq_bias_all[jdx]
-                    # ----------------------refine---------------------
-                    group_output_now = self.sigmoid(self.logit_wt_all[jdx]) * group_output_now + rel_bias_now.index_with_labels(group_pairs.long()) + (1 - self.sigmoid(self.logit_wt_all[jdx])) * cos_simi  # 把余弦相似度加上去
+                    group_output_now = self.sigmoid(self.logit_wt_all[jdx]) * group_output_now + rel_bias_now.index_with_labels(group_pairs.long()) + (1 - self.sigmoid(self.logit_wt_all[jdx])) * cos_simi
                 # actual_label_piece: if label is out of range, then filter it to ensure the training can continue
-                actual_label_now = self.pre_group_matrix[jdx][group_label] # 只保留在当前组的谓语类e.g.0-3
+                actual_label_now = self.pre_group_matrix[jdx][group_label] 
                 add_losses['%d_CE_loss' % (jdx + 1)] = self.CE_loss(group_output_now, actual_label_now)
-                add_losses['%d_simi_loss' % (jdx + 1)] = self.simi_CE_loss(cos_simi, actual_label_now) * 1.5 # 新增loss 注：nn.CrossEntropy()里自带了softmax
-                # ↑一组一个loss，超出本组范围的谓语视为bg
+                add_losses['%d_simi_loss' % (jdx + 1)] = self.simi_CE_loss(cos_simi, actual_label_now) * 1.5 
+
                 if self.Knowledge_Transfer_Mode == 'KL_logit_Neighbor': # collaborative knowledge distallation
                     if i > 0:
                         '''count knowledge transfer loss'''
@@ -959,29 +943,28 @@ class MotifsLike_GCL(nn.Module):
 
                 elif self.Knowledge_Transfer_Mode == 'KL_logit_TopDown':
                     layer_total_loss = 0
-                    for jbef in range(i): # 前一个(范围窄)学到的知识迁移到下一个(范围广)0→1
+                    for jbef in range(i): 
                         rel_classier_bef = self.rel_classifer_all[jbef]
                         group_output_bef = rel_classier_bef(group_input)
-                        # ---------------新增-----------------
-                        v2l_proj_now = self.v2l_proj_all[jbef]  # 新增 # MLP把它投影到word embedding的维度 统一4096→200 最终维度类似191x200
+                
+                        v2l_proj_now = self.v2l_proj_all[jbef]  
                         v2l_rep_now = v2l_proj_now(group_input)
                         v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                        v2l_we_now = self.pred_embed[:self.predicate_incremental_count[jbef] + 1]  # 递增的类别数 最终维度类似5x200 10x200
+                        v2l_we_now = self.pred_embed[:self.predicate_incremental_count[jbef] + 1] 
                         v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
                         cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp()
-                        # -----------------------------------
+        
                         if self.use_bias:
                             rel_bias_bef = self.freq_bias_all[jbef]
-                            # --------------------------refine---------------------------
                             group_output_bef = self.sigmoid(self.logit_wt_all[jbef]) * group_output_bef + rel_bias_bef.index_with_labels(group_pairs.long()) + (1 - self.sigmoid(self.logit_wt_all[jbef])) * cos_simi
                         # kd_choice_vector = self.pre_kd_matrix[jbef][group_label]
                         max_vector = self.max_elemnt_list[jbef] + 1
 
-                        if self.no_relation_restrain: # 如果两物体间没有谓语，限制它对最终loss的贡献
-                            kd_choice_vector = self.pre_kd_matrix[jbef][group_label] # 1和0.1
+                        if self.no_relation_restrain: 
+                            kd_choice_vector = self.pre_kd_matrix[jbef][group_label] 
                             kd_loss_matrix = KL_divergence(group_output_bef[:, 1:], group_output_now[:, 1:max_vector],
-                                                           reduce=False) # 0-1 ; 0-2,1-2 ; 0-3,1-3,2-3;...
-                            kd_loss_vecify = kd_loss_matrix * kd_choice_vector # 如果不是上一组的谓语，它们的权重是0.1
+                                                           reduce=False) 
+                            kd_loss_vecify = kd_loss_matrix * kd_choice_vector 
                             kd_loss_final = self.knowledge_loss_coefficient * torch.mean(kd_loss_vecify)
                         else:
                             kd_loss_matrix = KL_divergence(group_output_bef[:, 1:], group_output_now[:, 1:max_vector],
@@ -1023,22 +1006,21 @@ class MotifsLike_GCL(nn.Module):
                         layer_total_loss += kd_loss_final
 
                     if i > 0:
-                        add_losses['%d_DKS_loss' % (jdx + 1)] = layer_total_loss # 加和a
+                        add_losses['%d_DKS_loss' % (jdx + 1)] = layer_total_loss 
             return None, None, add_losses
         else:
             rel_classier_test = self.rel_classifer_all[-1].cuda()
             rel_dists = rel_classier_test(prod_rep)
-            # ------------新增------------
+          
             v2l_test = self.v2l_proj_all[-1]
             v2l_rep = v2l_test(prod_rep)
             v2l_rep_norm = v2l_rep / v2l_rep.norm(dim=1, keepdim=True)
             v2l_we_embed = self.pred_embed
             v2l_we_embed_norm = v2l_we_embed / v2l_we_embed.norm(dim=1, keepdim=True)
             cos_simi = v2l_rep_norm @ v2l_we_embed_norm.t() * self.logit_scale.exp()
-            # ----------------------------
+   
             if self.use_bias:
                 rel_bias_test = self.freq_bias_all[-1]
-                # ----------------------refine---------------------
                 rel_dists = self.sigmoid(self.logit_wt_all[-1]) * rel_dists + rel_bias_test.index_with_labels(pair_pred.long()) + (1 - self.sigmoid(self.logit_wt_all[-1])) * cos_simi
             rel_dists = rel_dists.split(num_rels, dim=0)
             obj_dists = obj_dists.split(num_objs, dim=0)
@@ -1047,7 +1029,7 @@ class MotifsLike_GCL(nn.Module):
 
     def generate_muti_networks(self, num_cls):
         '''generate all the hier-net in the model, need to set mannually if use new hier-class'''
-        self.rel_classifer_1 = nn.Linear(self.pooling_dim, self.max_group_element_number_list[0] + 1) # 原来的都是pooling_dim 4096，现在是200，word embedding的维度
+        self.rel_classifer_1 = nn.Linear(self.pooling_dim, self.max_group_element_number_list[0] + 1) 
         self.rel_classifer_2 = nn.Linear(self.pooling_dim, self.max_group_element_number_list[1] + 1)
         self.rel_classifer_3 = nn.Linear(self.pooling_dim, self.max_group_element_number_list[2] + 1)
         self.rel_classifer_4 = nn.Linear(self.pooling_dim, self.max_group_element_number_list[3] + 1)
@@ -1059,8 +1041,8 @@ class MotifsLike_GCL(nn.Module):
             classifer_all = [self.rel_classifer_1, self.rel_classifer_2, self.rel_classifer_3, self.rel_classifer_4]
         elif num_cls < 4:
             exit('wrong num in compress_all')
-        else: # 5个分类器
-            self.rel_classifer_5 = nn.Linear(self.pooling_dim, self.max_group_element_number_list[4] + 1) # self.pooling_dim→200
+        else: 
+            self.rel_classifer_5 = nn.Linear(self.pooling_dim, self.max_group_element_number_list[4] + 1)
             layer_init(self.rel_classifer_5, xavier=True)
             if num_cls == 5:
                 classifer_all = [self.rel_classifer_1, self.rel_classifer_2, self.rel_classifer_3,
@@ -1083,7 +1065,7 @@ class MotifsLike_GCL(nn.Module):
 
     def generate_v2l_networks(self, num_cls):
         '''generate all the hier-net in the model, need to set mannually if use new hier-class'''
-        self.v2l_embedding_1 = nn.Linear(self.pooling_dim, 200)  # 原来的都是pooling_dim 4096，现在是200，word embedding的维度
+        self.v2l_embedding_1 = nn.Linear(self.pooling_dim, 200) 
         self.v2l_embedding_2 = nn.Linear(self.pooling_dim, 200)
         self.v2l_embedding_3 = nn.Linear(self.pooling_dim, 200)
         self.v2l_embedding_4 = nn.Linear(self.pooling_dim, 200)
@@ -1095,8 +1077,8 @@ class MotifsLike_GCL(nn.Module):
             classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3, self.v2l_embedding_4]
         elif num_cls < 4:
             exit('wrong num in compress_all')
-        else:  # 5个分类器
-            self.v2l_embedding_5 = nn.Linear(self.pooling_dim, 200) # self.pooling_dim→200
+        else:  
+            self.v2l_embedding_5 = nn.Linear(self.pooling_dim, 200) 
             layer_init(self.v2l_embedding_5, xavier=True)
             if num_cls == 5:
                 classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3, self.v2l_embedding_4, self.v2l_embedding_5]
@@ -1202,7 +1184,7 @@ class VCTree_GCL(nn.Module):
 
         self.num_groups = len(self.max_elemnt_list)
         self.rel_classifer_all = self.generate_muti_networks(self.num_groups)
-        self.v2l_proj_all = self.generate_v2l_networks(self.num_groups)  # 新增 !!两个self.classifer，在load的时候前面的classifer的参数是随机的
+        self.v2l_proj_all = self.generate_v2l_networks(self.num_groups)  
         self.CE_loss = nn.CrossEntropyLoss()
         if self.use_bias:
             self.freq_bias_all = self.generate_multi_bias(config, statistics, self.num_groups)
@@ -1217,20 +1199,19 @@ class VCTree_GCL(nn.Module):
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.simi_CE_loss = nn.CrossEntropyLoss()
 
-        # -----------------------NO GCL-----------------------------
-        # self.rel_classifer_no_gcl = nn.Linear(self.pooling_dim, 51)
-        # self.v2l_proj_all_no_gcl = nn.Linear(self.pooling_dim, 200)
-        # self.freq_bias_no_gcl = FrequencyBias_GCL(config, statistics, config.GLOBAL_SETTING.DATASET_CHOICE, predicate_all_list=self.bias_for_group_split[4])
-        # self.tri_up_dim2 = nn.Linear(config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM * 2, self.pooling_dim)
-
-        # ----------------------refine------------------------------
-        self.logit_wt_1 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[0] + 1)).cuda()
-        self.logit_wt_2 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[1] + 1)).cuda()
-        self.logit_wt_3 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[2] + 1)).cuda()
-        self.logit_wt_4 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[3] + 1)).cuda()
-        self.logit_wt_5 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[4] + 1)).cuda() # GQA不要这2句
-        self.logit_wt_all = [self.logit_wt_1, self.logit_wt_2, self.logit_wt_3, self.logit_wt_4, self.logit_wt_5]
-        # self.logit_wt_all = [self.logit_wt_1, self.logit_wt_2, self.logit_wt_3, self.logit_wt_4]
+        if config.GLOBAL_SETTING.DATASET_CHOICE == 'VG':
+            self.logit_wt_1 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[0] + 1)).cuda()
+            self.logit_wt_2 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[1] + 1)).cuda()
+            self.logit_wt_3 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[2] + 1)).cuda()
+            self.logit_wt_4 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[3] + 1)).cuda()
+            self.logit_wt_5 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[4] + 1)).cuda() 
+            self.logit_wt_all = [self.logit_wt_1, self.logit_wt_2, self.logit_wt_3, self.logit_wt_4, self.logit_wt_5]
+        elif config.GLOBAL_SETTING.DATASET_CHOICE == 'GQA_200':
+            self.logit_wt_1 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[0] + 1)).cuda()
+            self.logit_wt_2 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[1] + 1)).cuda()
+            self.logit_wt_3 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[2] + 1)).cuda()
+            self.logit_wt_4 = nn.Parameter(torch.rand(1, self.max_group_element_number_list[3] + 1)).cuda()
+            self.logit_wt_all = [self.logit_wt_1, self.logit_wt_2, self.logit_wt_3, self.logit_wt_4]
         self.sigmoid = nn.Sigmoid()
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, global_features, union_features, logger=None):
         """
@@ -1270,52 +1251,9 @@ class VCTree_GCL(nn.Module):
 
         if self.union_single_not_match:
             union_features = self.up_dim(union_features)
-
-        # prod_rep = prod_rep * union_features
-        prod_rep = (prod_rep + self.tri_up_dim(tri_rep)) * union_features # 512→4096，异质union # 现在用的
-        # prod_rep = (prod_rep + self.tri_up_dim(tri_rep)) * self.tri_up_dim2(union_features)  # 512→4096，异质union
+            
+        prod_rep = (prod_rep + self.tri_up_dim(tri_rep)) * union_features 
         add_losses = {}
-        # -------------------------NO GCL --------------------------
-        # if self.training:
-        #     binary_loss = []
-        #     for bi_gt, bi_pred in zip(rel_binarys, binary_preds):
-        #         bi_gt = (bi_gt > 0).float()
-        #         binary_loss.append(F.binary_cross_entropy_with_logits(bi_pred, bi_gt))
-        #     add_losses["binary_loss"] = sum(binary_loss) / len(binary_loss)
-        #     if not self.config.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
-        #         fg_labels = cat([proposal.get_field("labels") for proposal in proposals], dim=0)
-        #         loss_refine_obj = self.criterion_loss(obj_dists, fg_labels.long())
-        #         add_losses['obj_loss'] = loss_refine_obj
-        #
-        #     rel_labels = cat(rel_labels, dim=0)
-        #
-        #     rel_dists = self.rel_classifer_no_gcl(prod_rep)
-        #     # ---------------新增-----------------
-        #     v2l_rep_now = self.v2l_proj_all_no_gcl(prod_rep)  # 新增 # MLP把它投影到word embedding的维度 统一4096→200 最终维度类似191x200
-        #     v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-        #     v2l_we_now = self.pred_embed  # 递增的类别数 最终维度类似5x200 10x200
-        #     v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
-        #     cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp()  # 余弦相似度实质上就是norm(A)*norm(B)
-        #     # -----------------------------------
-        #     if self.use_bias:
-        #         rel_dists = rel_dists + self.freq_bias_no_gcl.index_with_labels(pair_pred.long()) + cos_simi  # 把余弦相似度加上去
-        #     add_losses['CE_loss'] = self.CE_loss(rel_dists, rel_labels)
-        #     add_losses['simi_loss'] = self.simi_CE_loss(cos_simi, rel_labels)  # 新增loss
-        #     return None, None, add_losses
-        # else:
-        #     rel_dists = self.rel_classifer_no_gcl(prod_rep)
-        #     # ------------新增------------
-        #     v2l_rep = self.v2l_proj_all_no_gcl(prod_rep)
-        #     v2l_rep_norm = v2l_rep / v2l_rep.norm(dim=1, keepdim=True)
-        #     v2l_we_embed = self.pred_embed
-        #     v2l_we_embed_norm = v2l_we_embed / v2l_we_embed.norm(dim=1, keepdim=True)
-        #     cos_simi = v2l_rep_norm @ v2l_we_embed_norm.t() * self.logit_scale.exp()
-        #     # ----------------------------
-        #     if self.use_bias:
-        #         rel_dists = rel_dists + self.freq_bias_no_gcl.index_with_labels(pair_pred.long()) + cos_simi
-        #     rel_dists = rel_dists.split(num_rels, dim=0)
-        #     obj_dists = obj_dists.split(num_objs, dim=0)
-        #     return obj_dists, rel_dists, add_losses
 
         if self.training:
             binary_loss = []
@@ -1380,22 +1318,21 @@ class VCTree_GCL(nn.Module):
                 jdx = i
                 rel_classier_now = self.rel_classifer_all[jdx]
                 group_output_now = rel_classier_now(group_input)
-                # ---------------新增-----------------
-                v2l_proj_now = self.v2l_proj_all[jdx]  # 新增 # MLP把它投影到word embedding的维度 统一4096→200 最终维度类似191x200
+               
+                v2l_proj_now = self.v2l_proj_all[jdx]
                 v2l_rep_now = v2l_proj_now(group_input)
                 v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                v2l_we_now = self.pred_embed[:self.predicate_incremental_count[i] + 1]  # 递增的类别数 最终维度类似5x200 10x200
+                v2l_we_now = self.pred_embed[:self.predicate_incremental_count[i] + 1] 
                 v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
-                cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp()  # 余弦相似度实质上就是norm(A)*norm(B)
-                # -----------------------------------
+                cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp() 
+        
                 if self.use_bias:
                     rel_bias_now = self.freq_bias_all[jdx]
-                    # ----------------------refine---------------------
-                    group_output_now = self.sigmoid(self.logit_wt_all[jdx]) * group_output_now + rel_bias_now.index_with_labels(group_pairs.long()) + (1-self.sigmoid(self.logit_wt_all[jdx])) * cos_simi # 把余弦相似度加上去
+                    group_output_now = self.sigmoid(self.logit_wt_all[jdx]) * group_output_now + rel_bias_now.index_with_labels(group_pairs.long()) + (1-self.sigmoid(self.logit_wt_all[jdx])) * cos_simi 
                 # actual_label_piece: if label is out of range, then filter it to ensure the training can continue
                 actual_label_now = self.pre_group_matrix[jdx][group_label]
                 add_losses['%d_CE_loss' % (jdx + 1)] = self.CE_loss(group_output_now, actual_label_now)
-                add_losses['%d_simi_loss' % (jdx + 1)] = self.simi_CE_loss(cos_simi, actual_label_now) * 1.5# 新增loss
+                add_losses['%d_simi_loss' % (jdx + 1)] = self.simi_CE_loss(cos_simi, actual_label_now)
                 if self.Knowledge_Transfer_Mode == 'KL_logit_Neighbor':
                     if i > 0:
                         '''count knowledge transfer loss'''
@@ -1424,17 +1361,16 @@ class VCTree_GCL(nn.Module):
                     for jbef in range(i):
                         rel_classier_bef = self.rel_classifer_all[jbef]
                         group_output_bef = rel_classier_bef(group_input)
-                        # ---------------新增-----------------
-                        v2l_proj_now = self.v2l_proj_all[jbef]  # 新增 # MLP把它投影到word embedding的维度 统一4096→200 最终维度类似191x200
+                      
+                        v2l_proj_now = self.v2l_proj_all[jbef] 
                         v2l_rep_now = v2l_proj_now(group_input)
                         v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                        v2l_we_now = self.pred_embed[:self.predicate_incremental_count[jbef] + 1]  # 递增的类别数 最终维度类似5x200 10x200
+                        v2l_we_now = self.pred_embed[:self.predicate_incremental_count[jbef] + 1] 
                         v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
                         cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp()
-                        # -----------------------------------
+                  
                         if self.use_bias:
                             rel_bias_bef = self.freq_bias_all[jbef]
-                            # --------------------------refine---------------------------
                             group_output_bef = self.sigmoid(self.logit_wt_all[jbef]) * group_output_bef + rel_bias_bef.index_with_labels(group_pairs.long()) + (1-self.sigmoid(self.logit_wt_all[jbef])) * cos_simi
                         # kd_choice_vector = self.pre_kd_matrix[jbef][group_label]
                         max_vector = self.max_elemnt_list[jbef] + 1
@@ -1490,17 +1426,16 @@ class VCTree_GCL(nn.Module):
         else:
             rel_classier_test = self.rel_classifer_all[-1]
             rel_dists = rel_classier_test(prod_rep)
-            # ------------新增------------
+
             v2l_test = self.v2l_proj_all[-1]
             v2l_rep = v2l_test(prod_rep)
             v2l_rep_norm = v2l_rep / v2l_rep.norm(dim=1, keepdim=True)
             v2l_we_embed = self.pred_embed
             v2l_we_embed_norm = v2l_we_embed / v2l_we_embed.norm(dim=1, keepdim=True)
             cos_simi = v2l_rep_norm @ v2l_we_embed_norm.t() * self.logit_scale.exp()
-            # ----------------------------
+
             if self.use_bias:
                 rel_bias_test = self.freq_bias_all[-1]
-                # ----------------------refine---------------------
                 rel_dists = self.sigmoid(self.logit_wt_all[-1]) * rel_dists + rel_bias_test.index_with_labels(pair_pred.long()) + (1-self.sigmoid(self.logit_wt_all[-1])) * cos_simi
             rel_dists = rel_dists.split(num_rels, dim=0)
             obj_dists = obj_dists.split(num_objs, dim=0)
@@ -1572,7 +1507,7 @@ class VCTree_GCL(nn.Module):
 
     def generate_v2l_networks(self, num_cls):
         '''generate all the hier-net in the model, need to set mannually if use new hier-class'''
-        self.v2l_embedding_1 = nn.Linear(self.pooling_dim, 200)  # 原来的都是pooling_dim 4096，现在是200，word embedding的维度
+        self.v2l_embedding_1 = nn.Linear(self.pooling_dim, 200)  
         self.v2l_embedding_2 = nn.Linear(self.pooling_dim, 200)
         self.v2l_embedding_3 = nn.Linear(self.pooling_dim, 200)
         self.v2l_embedding_4 = nn.Linear(self.pooling_dim, 200)
@@ -1584,7 +1519,7 @@ class VCTree_GCL(nn.Module):
             classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3, self.v2l_embedding_4]
         elif num_cls < 4:
             exit('wrong num in compress_all')
-        else:  # 5个分类器
+        else:
             self.v2l_embedding_5 = nn.Linear(self.pooling_dim, 200) # self.pooling_dim→200
             layer_init(self.v2l_embedding_5, xavier=True)
             if num_cls == 5:
@@ -1782,9 +1717,9 @@ def make_roi_relation_predictor(cfg, in_channels):
     if cfg.GLOBAL_SETTING.RELATION_PREDICTOR in ['MotifsLike_GCL', 'MotifsLikePredictor']:
         assert cfg.GLOBAL_SETTING.BASIC_ENCODER in ['Motifs', 'VTransE']
         result_str += ('\n-----Model mode is [ %s ]' % cfg.GLOBAL_SETTING.BASIC_ENCODER)
-    # 得到50类谓语的分组
+
     num_of_group_element_list, predicate_stage_count, _ = get_group_splits(cfg.GLOBAL_SETTING.DATASET_CHOICE, cfg.GLOBAL_SETTING.GCL_SETTING.GROUP_SPLIT_MODE)
-    max_group_element_number_list = generate_num_stage_vector(num_of_group_element_list) # 4,10,19,38,50，最大数
+    max_group_element_number_list = generate_num_stage_vector(num_of_group_element_list)
     incre_idx_list, max_elemnt_list, group_matrix, kd_matrix = get_current_predicate_idx(
         num_of_group_element_list, cfg.GLOBAL_SETTING.GCL_SETTING.NO_RELATION_PENALTY, cfg.GLOBAL_SETTING.DATASET_CHOICE)
     result_str += ('\n   the number of elements in each group is {}'.format(incre_idx_list))
