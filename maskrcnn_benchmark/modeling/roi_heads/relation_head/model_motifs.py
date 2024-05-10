@@ -165,7 +165,7 @@ class DecoderRNN(nn.Module):
 
             previous_state, previous_memory = self.lstm_equations(timestep_input, previous_state,
                                                                   previous_memory, dropout_mask=dropout_mask)
-            obj_rep.append(previous_state) # 应该是这个是对比损失的representation
+            obj_rep.append(previous_state) 
             pred_dist = self.out_obj(previous_state)
             out_dists.append(pred_dist)
 
