@@ -93,7 +93,6 @@ class TransLike_GCL(nn.Module):
 
         self.num_groups = len(self.max_elemnt_list)
         self.rel_compress_all, self.ctx_compress_all = self.generate_muti_networks(self.num_groups)
-        self.v2l_proj_all = self.generate_v2l_networks(self.num_groups)  
         self.CE_loss = nn.CrossEntropyLoss()
 
         if self.use_bias:
@@ -104,11 +103,6 @@ class TransLike_GCL(nn.Module):
             self.pre_group_matrix = torch.tensor(self.group_matrix, dtype=torch.int64).cuda()
             self.pre_kd_matrix = torch.tensor(self.kd_matrix, dtype=torch.float16).cuda()
             self.criterion_loss = nn.CrossEntropyLoss()
-
-        self.tri_up_dim = nn.Linear(config.MODEL.ROI_RELATION_HEAD.CONTEXT_HIDDEN_DIM, self.pooling_dim)
-        self.pred_embed = torch.load('./pred_embedding.pt').cuda()  
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        self.simi_CE_loss = nn.CrossEntropyLoss()
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, global_features, union_features, logger=None):
         add_losses = {}
@@ -142,8 +136,7 @@ class TransLike_GCL(nn.Module):
         if self.union_single_not_match:
             visual_rep = ctx_gate * self.up_dim(union_features)
         else:
-            # visual_rep = ctx_gate * union_features
-            visual_rep = (ctx_gate + self.tri_up_dim(tri_rep)) * union_features
+            visual_rep = ctx_gate * union_features
 
         if self.training:
             if not self.config.MODEL.ROI_RELATION_HEAD.USE_GT_OBJECT_LABEL:
@@ -206,20 +199,13 @@ class TransLike_GCL(nn.Module):
                 ctx_compress_now = self.ctx_compress_all[jdx].cuda()
                 group_output_now = rel_compress_now(group_visual) + ctx_compress_now(group_input)
                
-                v2l_proj_now = self.v2l_proj_all[jdx]  
-                v2l_rep_now = v2l_proj_now(group_visual)
-                v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                v2l_we_now = self.pred_embed[:self.predicate_incremental_count[i] + 1] 
-                v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
-                cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp() 
-               
                 if self.use_bias:
                     rel_bias_now = self.freq_bias_all[jdx]
-                    group_output_now = group_output_now + rel_bias_now.index_with_labels(group_pairs.long()) + cos_simi 
+                    group_output_now = group_output_now + rel_bias_now.index_with_labels(group_pairs.long())
                 # actual_label_piece: if label is out of range, then filter it to ensure the training can continue
                 actual_label_now = self.pre_group_matrix[jdx][group_label]
                 add_losses['%d_CE_loss' % (jdx + 1)] = self.CE_loss(group_output_now, actual_label_now)
-                add_losses['%d_simi_loss' % (jdx + 1)] = self.simi_CE_loss(cos_simi, actual_label_now) 
+
                 if self.Knowledge_Transfer_Mode == 'KL_logit_Neighbor':
                     if i > 0:
                         '''count knowledge transfer loss'''
@@ -250,17 +236,10 @@ class TransLike_GCL(nn.Module):
                         rel_compress_bef = self.rel_compress_all[jbef]
                         ctx_compress_bef = self.ctx_compress_all[jbef]
                         group_output_bef = rel_compress_bef(group_visual) + ctx_compress_bef(group_input)
-                        
-                        v2l_proj_now = self.v2l_proj_all[jbef] 
-                        v2l_rep_now = v2l_proj_now(group_visual)
-                        v2l_embed_now = v2l_rep_now / v2l_rep_now.norm(dim=1, keepdim=True)
-                        v2l_we_now = self.pred_embed[:self.predicate_incremental_count[jbef] + 1]  
-                        v2l_we_norm_now = v2l_we_now / v2l_we_now.norm(dim=1, keepdim=True)
-                        cos_simi = v2l_embed_now @ v2l_we_norm_now.t() * self.logit_scale.exp()
-                        
+                
                         if self.use_bias:
                             rel_bias_bef = self.freq_bias_all[jbef]
-                            group_output_bef = group_output_bef + rel_bias_bef.index_with_labels(group_pairs.long()) + cos_simi
+                            group_output_bef = group_output_bef + rel_bias_bef.index_with_labels(group_pairs.long())
                         max_vector = self.max_elemnt_list[jbef] + 1
 
                         if self.no_relation_restrain:
@@ -317,16 +296,9 @@ class TransLike_GCL(nn.Module):
             ctx_compress_test = self.ctx_compress_all[-1].cuda()
             rel_dists = rel_compress_test(visual_rep) + ctx_compress_test(prod_rep)
    
-            v2l_test = self.v2l_proj_all[-1]
-            v2l_rep = v2l_test(visual_rep)
-            v2l_rep_norm = v2l_rep / v2l_rep.norm(dim=1, keepdim=True)
-            v2l_we_embed = self.pred_embed
-            v2l_we_embed_norm = v2l_we_embed / v2l_we_embed.norm(dim=1, keepdim=True)
-            cos_simi = v2l_rep_norm @ v2l_we_embed_norm.t() * self.logit_scale.exp()
-
             if self.use_bias:
                 rel_bias_test = self.freq_bias_all[-1]
-                rel_dists = rel_dists + rel_bias_test.index_with_labels(pair_pred.long()) + cos_simi
+                rel_dists = rel_dists + rel_bias_test.index_with_labels(pair_pred.long()) 
             rel_dists = rel_dists.split(num_rels, dim=0)
             obj_dists = obj_dists.split(num_objs, dim=0)
 
@@ -388,41 +360,6 @@ class TransLike_GCL(nn.Module):
                     if num_cls > 7:
                         exit('wrong num in compress_all')
         return classifer_all, compress_all
-
-    def generate_v2l_networks(self, num_cls):
-        '''generate all the hier-net in the model, need to set mannually if use new hier-class'''
-        self.v2l_embedding_1 = nn.Linear(self.pooling_dim, 200) 
-        self.v2l_embedding_2 = nn.Linear(self.pooling_dim, 200)
-        self.v2l_embedding_3 = nn.Linear(self.pooling_dim, 200)
-        self.v2l_embedding_4 = nn.Linear(self.pooling_dim, 200)
-        layer_init(self.v2l_embedding_1, xavier=True)
-        layer_init(self.v2l_embedding_2, xavier=True)
-        layer_init(self.v2l_embedding_3, xavier=True)
-        layer_init(self.v2l_embedding_4, xavier=True)
-        if num_cls == 4:
-            classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3, self.v2l_embedding_4]
-        elif num_cls < 4:
-            exit('wrong num in compress_all')
-        else: 
-            self.v2l_embedding_5 = nn.Linear(self.pooling_dim, 200) 
-            layer_init(self.v2l_embedding_5, xavier=True)
-            if num_cls == 5:
-                classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3, self.v2l_embedding_4, self.v2l_embedding_5]
-            else:
-                self.v2l_embedding_6 = nn.Linear(self.pooling_dim, 200)
-                layer_init(self.v2l_embedding_6, xavier=True)
-                if num_cls == 6:
-                    classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3,
-                                     self.v2l_embedding_4, self.v2l_embedding_5, self.v2l_embedding_6]
-                else:
-                    self.v2l_embedding_7 = nn.Linear(self.pooling_dim, 200)
-                    layer_init(self.v2l_embedding_7, xavier=True)
-                    classifer_all = [self.v2l_embedding_1, self.v2l_embedding_2, self.v2l_embedding_3,
-                                     self.v2l_embedding_4, self.v2l_embedding_5, self.v2l_embedding_6,
-                                     self.v2l_embedding_7]
-                    if num_cls > 7:
-                        exit('wrong num in compress_all')
-        return classifer_all
 
     def generate_multi_bias(self, config, statistics, num_cls):
         self.freq_bias_1 = FrequencyBias_GCL(config, statistics, config.GLOBAL_SETTING.DATASET_CHOICE, predicate_all_list=self.bias_for_group_split[0])
