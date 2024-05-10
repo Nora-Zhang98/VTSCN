@@ -98,7 +98,7 @@ class RelationFeatureExtractor(nn.Module):
             union_features = (region_features, spatial_features)
         else:
             union_features = union_vis_features + rect_features
-            union_features = self.shift(union_features, shift_div=8) # (1)加入shift 现在用的
+            union_features = self.shift(union_features, shift_div=8) 
             union_features = self.feature_extractor.forward_without_pool(union_features) # (total_num_rel, out_channels)
 
         if self.cfg.MODEL.ATTRIBUTE_ON:
@@ -119,12 +119,12 @@ class RelationFeatureExtractor(nn.Module):
         Returns:
             torch.Tensor: The shifted feature.
         """
-        # [N, C, H, W] # 下一步：4块移动 4块不动？ 不平均分试试
+        # [N, C, H, W] 
         n, c, h, w = x.size()
 
         # [N // num_segments, num_segments, C, H,W]
 
-        # x = x.view(-1, c, h, w) # 可以不要
+        # x = x.view(-1, c, h, w) 
 
         # get shift fold
         fold = c // shift_div
@@ -140,25 +140,25 @@ class RelationFeatureExtractor(nn.Module):
         # shift Height forward on num_segments channel in `H_f_split`
         zeros = H_f_split - H_f_split
         blank = zeros[:, :, :1, :]
-        H_f_split = H_f_split[:, :, 1:, :]  # 高度那份(倒数第二维)右移
+        H_f_split = H_f_split[:, :, 1:, :]  
         H_f_split = torch.cat((H_f_split, blank), 2)
 
         # shift Height backward on num_segments channel in `H_f_split`
         zeros = H_b_split - H_b_split
         blank = zeros[:, :, :1, :]
-        H_b_split = H_b_split[:, :, :-1, :]  # 高度那份(倒数第二维)左移
+        H_b_split = H_b_split[:, :, :-1, :]  
         H_b_split = torch.cat((blank, H_b_split), 2)
 
         # shift Width forward on num_segments channel in `W_f_split`
         zeros = W_f_split - W_f_split
         blank = zeros[:, :, :, :1]
-        W_f_split = W_f_split[:, :, :, 1:]  # 宽度那份(最后一维)右移
+        W_f_split = W_f_split[:, :, :, 1:]  
         W_f_split = torch.cat((W_f_split, blank), 3)
 
         # shift Width backward on num_segments channel in `W_b_split`
         zeros = W_b_split - W_b_split
         blank = zeros[:, :, :, :1]
-        W_b_split = W_b_split[:, :, :, :-1]  # 宽度那份(最后一维)左移
+        W_b_split = W_b_split[:, :, :, :-1]  
         W_b_split = torch.cat((blank, W_b_split), 3)
 
         # no_shift_split: no shift
