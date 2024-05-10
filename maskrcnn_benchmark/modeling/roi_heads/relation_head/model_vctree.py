@@ -184,16 +184,15 @@ class VCTreeLSTMContext(nn.Module):
             nn.Linear(self.hidden_dim * 2 + 128, self.hidden_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(p=self.dropout_rate),
-            nn.Linear(self.hidden_dim, self.hidden_dim)  # 最后输出维度是512
+            nn.Linear(self.hidden_dim, self.hidden_dim)  
         )
         layer_init(self.lin_tri[1], xavier=True)
         layer_init(self.lin_tri[4], xavier=True)
-        # self.pred_embed_proj = nn.Linear(self.embed_dim, 128)  # 200维映射到128
-        self.pred_embed_proj = nn.Linear(self.embed_dim, self.hidden_dim)  # 200维映射到512 新
-        # ---------------UPT：InteractionHead提取union feature-------------
-        self.interaction_head = InteractionHead(self.cfg.UPT.HIDDEN_DIM, self.cfg.UPT.REPR_DIM, self.cfg.UPT.NUM_CHANNELS)  # 256,512,2048 # 这的维度?
+        # self.pred_embed_proj = nn.Linear(self.embed_dim, 128) 
+        self.pred_embed_proj = nn.Linear(self.embed_dim, self.hidden_dim) 
+        # ---------------UPT：InteractionHead for union feature-------------
+        self.interaction_head = InteractionHead(self.cfg.UPT.HIDDEN_DIM, self.cfg.UPT.REPR_DIM, self.cfg.UPT.NUM_CHANNELS)
         self.up_dim = nn.Linear(self.hidden_dim, self.hidden_dim * 4)
-        # self.fusion_attn = ScaledDotProductAttention(temperature=np.power(4096, 0.5))
 
     def obj_ctx(self, num_objs, obj_feats, proposals, obj_labels=None, vc_forest=None, ctx_average=False):
         """
@@ -286,9 +285,9 @@ class VCTreeLSTMContext(nn.Module):
         # object level contextual feature
         obj_ctxs, obj_preds, obj_dists = self.obj_ctx(num_objs, obj_pre_rep, proposals, obj_labels, vc_forest, ctx_average=ctx_average)
 
-        # -----------------UPT提取union feature-----------------
+        # -----------------UPT for union feature-----------------
         new_union_features = self.interaction_head(x, obj_ctxs, proposals, global_features, rel_pair_idxs, self.mode)
-        union_features = union_features + self.up_dim(new_union_features)  # 还是这个效果最好
+        union_features = union_features + self.up_dim(new_union_features) 
 
         # edge level contextual feature
         obj_embed2 = self.obj_embed2(obj_preds.long())
@@ -297,11 +296,10 @@ class VCTreeLSTMContext(nn.Module):
         tri_reps = []
         obj_ctx_all = obj_ctxs.split(num_objs)
         obj_label_all = obj_preds.split(num_objs)
-        # 三元组分支
-        # 分图片来吧 一起真的崩
+
         for obj_c, obj_l, rel_pair_id, num_obj in zip(obj_ctx_all, obj_label_all, rel_pair_idxs, num_objs):
             num_rel = len(rel_pair_id)
-            if num_rel == 0:  # 有这样的图片
+            if num_rel == 0: 
                 continue
             sub_label = obj_l[rel_pair_id[:, 0]]
             obj_label = obj_l[rel_pair_id[:, 1]]
