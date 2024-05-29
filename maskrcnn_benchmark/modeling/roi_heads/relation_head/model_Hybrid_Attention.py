@@ -164,8 +164,7 @@ class SHA_Context(nn.Module):
         self.v_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRI_TRANSFORMER.VAL_DIM
         self.inner_dim = self.cfg.MODEL.ROI_RELATION_HEAD.TRI_TRANSFORMER.INNER_DIM
         self.dropout_rate = self.cfg.MODEL.ROI_RELATION_HEAD.TRI_TRANSFORMER.DROPOUT_RATE
-        self.tri_encoder = TransformerEncoder(self.tri_layer, self.num_head, self.k_dim,
-                                              self.v_dim, self.hidden_dim, self.inner_dim, self.dropout_rate)
+       
         self.lin_tri = nn.Sequential(
             nn.Dropout(p=self.dropout_rate),
             nn.Linear(self.hidden_dim * 2 + 128, self.hidden_dim),
@@ -176,10 +175,6 @@ class SHA_Context(nn.Module):
         layer_init(self.lin_tri[1], xavier=True)
         layer_init(self.lin_tri[4], xavier=True)
         self.pred_embed_proj = nn.Linear(self.embed_dim, self.hidden_dim) 
-        # ---------------UPT：InteractionHead for union feature-------------
-        self.interaction_head = InteractionHead(self.cfg.UPT.HIDDEN_DIM, self.cfg.UPT.REPR_DIM,
-                                                self.cfg.UPT.NUM_CHANNELS) 
-        self.up_dim = nn.Linear(self.hidden_dim * 2, self.hidden_dim * 8)
 
     def forward(self, roi_features, proposals, global_features, rel_pair_idxs, union_features, logger=None):
         # labels will be used in DecoderRNN during training
@@ -207,10 +202,6 @@ class SHA_Context(nn.Module):
         obj_pre_rep_txt = self.lin_obj_textual(obj_pre_rep_txt) 
         obj_feats_vis, _, = self.context_obj(obj_pre_rep_vis, obj_pre_rep_txt, num_objs) 
 
-        # -----------------UPT for union feature-----------------
-        new_union_features = self.interaction_head(roi_features, obj_feats_vis, proposals, global_features, rel_pair_idxs, self.mode) 
-        union_features = union_features + self.up_dim(new_union_features) 
-
         obj_feats = obj_feats_vis
 
         # predict obj_dists and obj_preds
@@ -234,22 +225,6 @@ class SHA_Context(nn.Module):
         tri_reps = []
         obj_ctx_all = obj_feats.split(num_objs)
         obj_label_all = obj_preds.split(num_objs)
-  
-        for obj_c, obj_l, rel_pair_id, num_obj in zip(obj_ctx_all, obj_label_all, rel_pair_idxs, num_objs):
-            num_rel = len(rel_pair_id)
-            if num_rel == 0:  
-                continue
-            # tri_rep = torch.cat((obj_c[rel_pair_id[:, 0]], obj_c[rel_pair_id[:, 1]]), dim=-1)
-            sub_label = obj_l[rel_pair_id[:, 0]]
-            obj_label = obj_l[rel_pair_id[:, 1]]
-            sub_embed = self.obj_embed1(sub_label.long())
-            obj_embed = self.obj_embed1(obj_label.long())
-            tri_rep = self.pred_embed_proj(sub_embed - obj_embed)
-            # tri_rep = torch.cat((tri_rep, self.pred_embed_proj(sub_embed - obj_embed)), dim=-1)  # 1024+128 相当于pairwise_tokens
-            # tri_rep = self.lin_tri(tri_rep)  # 200→512维
-            tri_rep = self.tri_encoder(tri_rep, [num_rel])
-            tri_reps.append(tri_rep)
-        tri_rep = cat(tri_reps)
 
         # edge context
         edge_pre_rep_vis = self.lin_edge_visual(edge_pre_rep_vis) # 4608→512
@@ -257,7 +232,7 @@ class SHA_Context(nn.Module):
         edge_ctx_vis, _ = self.context_edge(edge_pre_rep_vis, edge_pre_rep_txt, num_objs) # # SHA encoder，只保留第一个返回值，即视觉特征
         edge_ctx = edge_ctx_vis
 
-        return obj_dists, obj_preds, edge_ctx, union_features, tri_rep
+        return obj_dists, obj_preds, edge_ctx
 
     def nms_per_cls(self, obj_dists, boxes_per_cls, num_objs):
         obj_dists = obj_dists.split(num_objs, dim=0)
