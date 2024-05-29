@@ -106,7 +106,7 @@ class TransLike_GCL(nn.Module):
 
     def forward(self, proposals, rel_pair_idxs, rel_labels, rel_binarys, roi_features, global_features, union_features, logger=None):
         add_losses = {}
-        obj_dists, obj_preds, edge_ctx, union_features, tri_rep = self.context_layer(roi_features, proposals, global_features, rel_pair_idxs, union_features, logger)
+        obj_dists, obj_preds, edge_ctx = self.context_layer(roi_features, proposals, global_features, rel_pair_idxs, union_features, logger)
         # post decode
         edge_rep = self.post_emb(edge_ctx) 
         edge_rep = edge_rep.view(edge_rep.size(0), 2, self.hidden_dim)
