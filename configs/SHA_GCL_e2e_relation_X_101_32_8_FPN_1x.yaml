@@ -138,7 +138,7 @@ TEST:
   CUSTUM_PATH: '.'         # the folder that contains the custum images, only jpg files are allowed 
   IMS_PER_BATCH: 1
 GLOBAL_SETTING:
-  ############### Parameters for Basic Encoder in Predictor ##############
+  ############### Parameters for Basic Encoder in Predictor ############## # MotifsLike_GCL, VCTree_GCL are implemented with VTSCN #
   # RELATION_PREDICTOR: "MotifsLikePredictor"
   #RELATION_PREDICTOR: "VCTreePredictor"
   #RELATION_PREDICTOR: "TransLikePredictor"
@@ -152,7 +152,7 @@ GLOBAL_SETTING:
   USE_BIAS: True                                      # If use the relation statistics to serve as the priori knowledge
   CHOOSE_BEST_MODEL_BY_METRIC: '_mean_recall'         # ['_recall', '_mean_recall'] To control which metric is the main concern
   PRINT_INTERVAL: 100
-  ############### Parameters for GCL Loss Setting ##############
+  ############### Parameters for GCL Loss Setting ############## # For VTSCN, please do not change parameters of GCL_SETTING #
   GCL_SETTING:
     GROUP_SPLIT_MODE: 'divide4'                       # To control the number of groups ['divide4', ''divide3', 'divide5', 'average']
     KNOWLEDGE_LOSS_COEFFICIENT: 1.0                   # To control the loss of Knowledge Transfer
