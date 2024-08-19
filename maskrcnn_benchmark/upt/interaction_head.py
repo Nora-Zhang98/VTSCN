@@ -113,9 +113,6 @@ class MultiBranchFusion(nn.Module):
             for _ in range(cardinality)
         ])
     def forward(self, appearance: Tensor, spatial: Tensor) -> Tensor:
-        # a = self.fc_1[0](appearance)
-        # b = self.fc_2[0](spatial)
-        # c = self.fc_3[0](F.relu(a * b))
         return F.relu(torch.stack([
             fc_3(F.relu(fc_1(appearance) * fc_2(spatial)))
             for fc_1, fc_2, fc_3
@@ -167,8 +164,8 @@ class ModifiedEncoderLayer(nn.Module):
         device = x.device
         n = len(x)
 
-        u = F.relu(self.unary(x)) # 512→512 obj_ctx 3
-        p = F.relu(self.pairwise(y)) # 512→512 pair_spatial_info 9
+        u = F.relu(self.unary(x)) 
+        p = F.relu(self.pairwise(y)) 
 
         # Unary features (H, N, L)
         u_r = self.reshape(u)
@@ -183,18 +180,18 @@ class ModifiedEncoderLayer(nn.Module):
         # Features used to compute attention (H, N, N, 3L)
         attn_features = torch.cat([
             u_r[:, i], u_r[:, j], p_r
-        ], dim=-1) # 9
+        ], dim=-1) 
         # Attention weights (H,) (N, N, 1)
         weights = [
             F.softmax(l(f), dim=0) for f, l
             in zip(attn_features, self.attn)
-        ] # aij 9
+        ] 
         # Repeated unary feaures along the third dimension (H, N, N, L)
-        u_r_repeat = u_r.unsqueeze(dim=2).repeat(1, 1, n, 1) # xi
+        u_r_repeat = u_r.unsqueeze(dim=2).repeat(1, 1, n, 1) 
         messages = [
             l(f_1 * f_2) for f_1, f_2, l
             in zip(u_r_repeat, p_r, self.message)
-        ]# mij 9
+        ]
 
         aggregated_messages = self.aggregate(F.relu(
             torch.cat([
@@ -203,7 +200,7 @@ class ModifiedEncoderLayer(nn.Module):
             ], dim=-1) 
         ))
         aggregated_messages = self.dropout(aggregated_messages)
-        x = self.norm(x + aggregated_messages) # obj_ctx
+        x = self.norm(x + aggregated_messages) 
         x = self.ffn(x)
 
         if self.return_weights: attn = weights
@@ -271,20 +268,20 @@ class InteractionHead(nn.Module):
         self.coop_layer = ModifiedEncoder(
             hidden_size=hidden_state_size,
             representation_size=representation_size,
-            num_layers=2, # vctree OOM 先改成1层
+            num_layers=2, 
             return_weights=True
         )
         self.coop_layer_dis = ModifiedEncoder(
             hidden_size=hidden_state_size,
             representation_size=representation_size,
             num_layers=1,
-            return_weights=True, # 分散注意力 所有的rel_id都用上
+            return_weights=True, 
         )
         self.coop_layer_int = ModifiedEncoder(
             hidden_size=hidden_state_size,
             representation_size=representation_size,
             num_layers=1,
-            return_weights=True  # 集中注意力 只用提供的rel_id
+            return_weights=True  
         )
         self.comp_layer = pocket.models.TransformerEncoderLayer(
             hidden_size=representation_size * 2,
@@ -297,17 +294,12 @@ class InteractionHead(nn.Module):
             cardinality=16
         )
 
-        # self.mbf_g = MultiBranchFusion(
-        #     num_channels, representation_size,
-        #     representation_size, cardinality=16
-        # )
         self.mbf_g = MultiBranchFusion(
             1280, representation_size,
             representation_size, cardinality=16
         )
 
         self.reduce_channel = nn.Linear(hidden_state_size*4, hidden_state_size*2)
-        # self.pred_embed = torch.load('/home/ubuntu/usefile/userfile/zrn/IETrans/tools/pred_embedding.pt')
         self.pairwise_embed = nn.Linear(1024+200, 1024)
         layer_init(self.pairwise_embed, xavier=True)
 
@@ -331,7 +323,7 @@ class InteractionHead(nn.Module):
             `hidden_states`: Tensor
                 (N, 256) Object features
         """
-        # 根据rel_pair_ids选出的
+        
         device = features.device
         boxes_per_image = [len(prp.bbox) for prp in proposals]
         obj_ctxs = obj_ctx.split(boxes_per_image, dim=0)
@@ -365,7 +357,7 @@ class InteractionHead(nn.Module):
                 x_keep, y_keep = rel_pair_id[:,0], rel_pair_id[:,1]
    
                 box_pair_spatial = compute_spatial_encodings(box[x_keep], box[y_keep], proposal.size)
-                box_pair_spatial = self.spatial_head(box_pair_spatial) # 512维
+                box_pair_spatial = self.spatial_head(box_pair_spatial) 
                 box_pair_spatial_reshaped = torch.zeros(n, n, 512).to(device)
                 box_pair_spatial_reshaped[x_keep, y_keep] = box_pair_spatial
 
@@ -381,7 +373,7 @@ class InteractionHead(nn.Module):
             ], dim=1)
 
             # Run the competitive layer# !-----------Multi Branch Fusion------------
-            pairwise_tokens, pairwise_attn = self.comp_layer(pairwise_tokens) # pairwise_token 1024维
+            pairwise_tokens, pairwise_attn = self.comp_layer(pairwise_tokens) 
          
             pairwise_tokens_collated.append(pairwise_tokens)
 
