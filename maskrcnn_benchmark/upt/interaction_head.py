@@ -200,7 +200,7 @@ class ModifiedEncoderLayer(nn.Module):
             torch.cat([
                 (w * m).sum(dim=0) for w, m
                 in zip(weights, messages)
-            ], dim=-1) # ∑aij*mij,不看cat看sum 3
+            ], dim=-1) 
         ))
         aggregated_messages = self.dropout(aggregated_messages)
         x = self.norm(x + aggregated_messages) # obj_ctx
@@ -337,7 +337,7 @@ class InteractionHead(nn.Module):
         obj_ctxs = obj_ctx.split(boxes_per_image, dim=0)
         pairwise_tokens_collated = []
 
-        for proposal, obj_ctx, global_feature, rel_pair_id in zip(proposals, obj_ctxs, global_features, rel_pair_idxs): # 按图片来
+        for proposal, obj_ctx, global_feature, rel_pair_id in zip(proposals, obj_ctxs, global_features, rel_pair_idxs): 
             box = proposal.bbox
             rel_pair_id = rel_pair_id.long()
             n = len(box)
@@ -347,49 +347,42 @@ class InteractionHead(nn.Module):
             )
             x = x.flatten(); y = y.flatten()
             if mode == 'sgdet':
-                # 第二阶段：集中注意力
-                x_keep, y_keep = rel_pair_id[:, 0], rel_pair_id[:, 1]  # rel_matrix和rel_id不太一样，以rel_id为准
-                # ↓只保留rel_id
-                box_pair_spatial = compute_spatial_encodings(box[x_keep], box[y_keep], proposal.size)  # 出来是36维
-                box_pair_spatial = self.spatial_head(box_pair_spatial)  # 512维
+                x_keep, y_keep = rel_pair_id[:, 0], rel_pair_id[:, 1]  
+
+                box_pair_spatial = compute_spatial_encodings(box[x_keep], box[y_keep], proposal.size)  
+                box_pair_spatial = self.spatial_head(box_pair_spatial)
                 box_pair_spatial_reshaped = torch.zeros(n, n, 512).to(device)
                 box_pair_spatial_reshaped[x_keep, y_keep] = box_pair_spatial
-                # Run the cooperative layer ：集中注意力
+
                 unary_tokens, unary_attn = self.coop_layer_int(obj_ctx, box_pair_spatial_reshaped)
             else:
-                # 改成只有集中注意力的，一直在nan
-                # 第一阶段：分散注意力
-                box_pair_spatial_all = compute_spatial_encodings(box[x], box[y], proposal.size)  # 出来是36维
-                box_pair_spatial_all = self.spatial_head(box_pair_spatial_all)  # 512维
+                box_pair_spatial_all = compute_spatial_encodings(box[x], box[y], proposal.size) 
+                box_pair_spatial_all = self.spatial_head(box_pair_spatial_all)  
                 box_pair_spatial_reshaped_all = box_pair_spatial_all.reshape(n, n, -1)
-                # Run the cooperative layer ：分散注意力
+
                 unary_tokens_dis, unary_attn_dis = self.coop_layer_dis(obj_ctx, box_pair_spatial_reshaped_all)
 
-                # 第二阶段：集中注意力
-                x_keep, y_keep = rel_pair_id[:,0], rel_pair_id[:,1] # rel_matrix和rel_id不太一样，以rel_id为准
-                # ↓只保留rel_id
-                box_pair_spatial = compute_spatial_encodings(box[x_keep], box[y_keep], proposal.size)# 出来是36维
+                x_keep, y_keep = rel_pair_id[:,0], rel_pair_id[:,1]
+   
+                box_pair_spatial = compute_spatial_encodings(box[x_keep], box[y_keep], proposal.size)
                 box_pair_spatial = self.spatial_head(box_pair_spatial) # 512维
                 box_pair_spatial_reshaped = torch.zeros(n, n, 512).to(device)
                 box_pair_spatial_reshaped[x_keep, y_keep] = box_pair_spatial
-                # Run the cooperative layer ：集中注意力
+
                 unary_tokens, unary_attn = self.coop_layer_int(unary_tokens_dis, box_pair_spatial_reshaped)
 
             pairwise_tokens = torch.cat([
-                self.mbf(  # 一元token和成对位置编码
+                self.mbf(  
                     self.reduce_channel(torch.cat([unary_tokens[x_keep], unary_tokens[y_keep]], 1)),
                     box_pair_spatial_reshaped[x_keep, y_keep]
-                ), self.mbf_g(  # 平均池化和成对位置编码
-                    global_feature[None, :],  # avgpool过的fm
+                ), self.mbf_g(  
+                    global_feature[None, :],  
                     box_pair_spatial_reshaped[x_keep, y_keep]),
             ], dim=1)
 
             # Run the competitive layer# !-----------Multi Branch Fusion------------
             pairwise_tokens, pairwise_attn = self.comp_layer(pairwise_tokens) # pairwise_token 1024维
-            # 二元token再经过transformer
-            # rel_id_pairtoken = torch.zeros(n, n, 1024).to(device)
-            # rel_id_pairtoken[x_keep, y_keep] = pairwise_tokens
-            # final_pairtoken = rel_id_pairtoken[rel_pair_id[:,0], rel_pair_id[:,1]]
+         
             pairwise_tokens_collated.append(pairwise_tokens)
 
         pairwise_tokens_collated = torch.cat(pairwise_tokens_collated)
